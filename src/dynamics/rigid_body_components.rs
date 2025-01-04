@@ -982,12 +982,16 @@ impl RigidBodyColliders {
 #[derive(Default, Clone, Debug, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 /// The dominance groups of a rigid-body.
 pub struct RigidBodyDominance {
+    ///The dominance group.
     pub value: i8,
+    ///The dominance benevolence. Benevolent dominances will allow interaction with lower dominances.
     pub is_benevolent: bool,
+    ///The dominance humbleness. Humble dominances will refuse to interact with rigid-bodies of a higher dominance, nullifying their benevolence for that specific collision.
     pub is_humble: bool,
 }
 
 impl RigidBodyDominance {
+    ///Generate a new rigid-body dominance.
     pub fn new(dominance: i8, is_benevolent: bool, is_humble: bool) -> Self {
         Self{
             value: dominance,
@@ -1004,7 +1008,8 @@ impl RigidBodyDominance {
         }
     }
 
-    pub fn get_resolved_dominance(dominance1: &RigidBodyDominance, status1: &RigidBodyType, dominance2: &RigidBodyDominance, status2: &RigidBodyType) -> i16 {
+    /// Get the relative dominance between to rigid-bodies, taking into account their type, benevolence and humbleness.
+    pub fn get_relative_dominance(dominance1: &RigidBodyDominance, status1: &RigidBodyType, dominance2: &RigidBodyDominance, status2: &RigidBodyType) -> i16 {
         if status1.is_dynamic() == status2.is_dynamic() {
             if !status1.is_dynamic() || dominance1.value == dominance2.value {
                 return 0;
@@ -1012,26 +1017,24 @@ impl RigidBodyDominance {
 
             if dominance1.value < dominance2.value {
                 if dominance2.is_benevolent {
-                    if dominance1.is_humble {
-                        return -1;
+                    if !dominance1.is_humble {
+                        return 0;
                     }
-                    return 0;
                 }
-                return -1;
+                return (dominance1.value - dominance2.value) as i16;
             } else {
                 if dominance1.is_benevolent {
-                    if dominance2.is_humble {
-                        return 1;
+                    if !dominance2.is_humble {
+                        return 0;
                     }
-                    return 0;
                 }
-                return 1;
+                return (dominance1.value - dominance2.value) as i16;
             }
         } else {
             if status1.is_dynamic() {
-                return -1;
+                return dominance1.value as i16 - (i8::MAX as i16 + 1);
             } else {
-                return 1;
+                return (i8::MAX as i16 + 1) - dominance2.value as i16;
             }
         }
     }

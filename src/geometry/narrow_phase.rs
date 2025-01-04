@@ -981,7 +981,7 @@ impl NarrowPhase {
                     manifold.data.rigid_body2 = co2.parent.map(|p| p.handle);
                     manifold.data.solver_flags = solver_flags;
 
-                    manifold.data.relative_dominance = RigidBodyDominance::get_resolved_dominance(
+                    manifold.data.relative_dominance = RigidBodyDominance::get_relative_dominance(
                         &dominance1, &rb_type1, &dominance2, &rb_type2
                     );
                     //manifold.data.relative_dominance = dominance1.effective_group(&rb_type1)

@@ -1165,9 +1165,9 @@ pub struct RigidBodyBuilder {
     pub soft_ccd_prediction: Real,
     /// The dominance group of the rigid-body to be built.
     pub dominance_group: i8,
-
+    /// The dominance benevolence of the rigid-body to be built.
     pub dominance_is_benevolent: bool,
-
+    /// The dominance humbleness of the rigid-body to be built.
     pub dominance_is_humble: bool,
     /// Will the rigid-body being built be enabled?
     pub enabled: bool,
@@ -1269,11 +1269,13 @@ impl RigidBodyBuilder {
         self
     }
 
+    /// Sets the dominance benevolence of this rigid-body.
     pub fn dominance_benevolence(mut self, is_benevolent: bool) -> Self {
         self.dominance_is_benevolent = is_benevolent;
         self
     }
 
+    /// Sets the dominance humbleness of this rigid-body.
     pub fn dominance_humbleness(mut self, is_humble: bool) -> Self {
         self.dominance_is_humble = is_humble;
         self
