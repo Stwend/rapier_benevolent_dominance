@@ -967,7 +967,7 @@ impl NarrowPhase {
                     co2.material.restitution_combine_rule as u8,
                 );
 
-                let zero = RigidBodyDominance(0); // The value doesn't matter, it will be MAX because of the effective groups.
+                let zero = RigidBodyDominance::new(0, false, false); // The value doesn't matter, it will be MAX because of the effective groups.
                 let dominance1 = rb1.map(|rb| rb.dominance).unwrap_or(zero);
                 let dominance2 = rb2.map(|rb| rb.dominance).unwrap_or(zero);
 
@@ -980,6 +980,7 @@ impl NarrowPhase {
                     manifold.data.rigid_body1 = co1.parent.map(|p| p.handle);
                     manifold.data.rigid_body2 = co2.parent.map(|p| p.handle);
                     manifold.data.solver_flags = solver_flags;
+                    //TODO: resolve w/ benevolent/humble flags!
                     manifold.data.relative_dominance = dominance1.effective_group(&rb_type1)
                         - dominance2.effective_group(&rb_type2);
                     manifold.data.normal = world_pos1 * manifold.local_n1;

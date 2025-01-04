@@ -627,14 +627,14 @@ impl RigidBody {
 
     /// The dominance group of this rigid-body.
     pub fn dominance_group(&self) -> i8 {
-        self.dominance.0
+        self.dominance.value
     }
 
     /// The dominance group of this rigid-body.
     pub fn set_dominance_group(&mut self, dominance: i8) {
-        if self.dominance.0 != dominance {
+        if self.dominance.value != dominance {
             self.changes.insert(RigidBodyChanges::DOMINANCE);
-            self.dominance.0 = dominance
+            self.dominance.value = dominance
         }
     }
 
@@ -1165,6 +1165,10 @@ pub struct RigidBodyBuilder {
     pub soft_ccd_prediction: Real,
     /// The dominance group of the rigid-body to be built.
     pub dominance_group: i8,
+
+    pub dominance_is_benevolent: bool,
+
+    pub dominance_is_humble: bool,
     /// Will the rigid-body being built be enabled?
     pub enabled: bool,
     /// An arbitrary user-defined 128-bit integer associated to the rigid-bodies built by this builder.
@@ -1200,6 +1204,8 @@ impl RigidBodyBuilder {
             ccd_enabled: false,
             soft_ccd_prediction: 0.0,
             dominance_group: 0,
+            dominance_is_benevolent: false,
+            dominance_is_humble: false,
             enabled: true,
             user_data: 0,
             additional_solver_iterations: 0,
@@ -1260,6 +1266,16 @@ impl RigidBodyBuilder {
     /// Sets the dominance group of this rigid-body.
     pub fn dominance_group(mut self, group: i8) -> Self {
         self.dominance_group = group;
+        self
+    }
+
+    pub fn dominance_benevolence(mut self, is_benevolent: bool) -> Self {
+        self.dominance_is_benevolent = is_benevolent;
+        self
+    }
+
+    pub fn dominance_humbleness(mut self, is_humble: bool) -> Self {
+        self.dominance_is_humble = is_humble;
         self
     }
 
@@ -1500,7 +1516,7 @@ impl RigidBodyBuilder {
         rb.damping.linear_damping = self.linear_damping;
         rb.damping.angular_damping = self.angular_damping;
         rb.forces.gravity_scale = self.gravity_scale;
-        rb.dominance = RigidBodyDominance(self.dominance_group);
+        rb.dominance = RigidBodyDominance::new(self.dominance_group, self.dominance_is_benevolent, self.dominance_is_humble);
         rb.enabled = self.enabled;
         rb.enable_ccd(self.ccd_enabled);
         rb.set_soft_ccd_prediction(self.soft_ccd_prediction);

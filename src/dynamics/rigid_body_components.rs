@@ -981,15 +981,63 @@ impl RigidBodyColliders {
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 #[derive(Default, Clone, Debug, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 /// The dominance groups of a rigid-body.
-pub struct RigidBodyDominance(pub i8);
+pub struct RigidBodyDominance {
+    pub value: i8,
+    pub is_benevolent: bool,
+    pub is_humble: bool,
+}
 
 impl RigidBodyDominance {
+    pub fn new(dominance: i8, is_benevolent: bool, is_humble: bool) -> Self {
+        Self{
+            value: dominance,
+            is_benevolent,
+            is_humble,
+        }
+    }
     /// The actual dominance group of this rigid-body, after taking into account its type.
     pub fn effective_group(&self, status: &RigidBodyType) -> i16 {
         if status.is_dynamic() {
-            self.0 as i16
+            self.value as i16
         } else {
             i8::MAX as i16 + 1
+        }
+    }
+
+    pub fn get_resolved_dominance(dominance1: &RigidBodyDominance, status1: &RigidBodyType, dominance2: &RigidBodyDominance, status2: &RigidBodyType) -> i16 {
+        if status1.is_dynamic() == status2.is_dynamic() {
+            if !status1.is_dynamic() || dominance1.value == dominance2.value {
+                return 0;
+            }
+
+            let lower: &RigidBodyDominance;
+            let higher: &RigidBodyDominance;
+            let dominance_sign: i16;
+            if dominance1.value < dominance2.value {
+                lower = dominance1;
+                higher = dominance2;
+                dominance_sign = -1;
+            } else {
+                lower = dominance2;
+                higher = dominance1;
+                dominance_sign = 1;
+            }
+
+            if higher.is_benevolent {
+                if lower.is_humble {
+                    return dominance_sign;
+                } else {
+                    return 0;
+                }
+            } else {
+                return dominance_sign;
+            }
+        } else {
+            if status1.is_dynamic() {
+                return -1;
+            } else {
+                return 1;
+            }
         }
     }
 }
