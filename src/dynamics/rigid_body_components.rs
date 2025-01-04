@@ -1010,27 +1010,22 @@ impl RigidBodyDominance {
                 return 0;
             }
 
-            let lower: &RigidBodyDominance;
-            let higher: &RigidBodyDominance;
-            let dominance_sign: i16;
             if dominance1.value < dominance2.value {
-                lower = dominance1;
-                higher = dominance2;
-                dominance_sign = -1;
-            } else {
-                lower = dominance2;
-                higher = dominance1;
-                dominance_sign = 1;
-            }
-
-            if higher.is_benevolent {
-                if lower.is_humble {
-                    return dominance_sign;
-                } else {
+                if dominance2.is_benevolent {
+                    if dominance1.is_humble {
+                        return -1;
+                    }
                     return 0;
                 }
+                return -1;
             } else {
-                return dominance_sign;
+                if dominance1.is_benevolent {
+                    if dominance2.is_humble {
+                        return 1;
+                    }
+                    return 0;
+                }
+                return 1;
             }
         } else {
             if status1.is_dynamic() {
