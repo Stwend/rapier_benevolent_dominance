@@ -981,8 +981,11 @@ impl NarrowPhase {
                     manifold.data.rigid_body2 = co2.parent.map(|p| p.handle);
                     manifold.data.solver_flags = solver_flags;
                     //TODO: resolve w/ benevolent/humble flags!
-                    manifold.data.relative_dominance = dominance1.effective_group(&rb_type1)
-                        - dominance2.effective_group(&rb_type2);
+                    manifold.data.relative_dominance = RigidBodyDominance::get_resolved_dominance(
+                        &dominance1, &rb_type1, &dominance2, &rb_type2
+                    );
+                    //manifold.data.relative_dominance = dominance1.effective_group(&rb_type1)
+                    //    - dominance2.effective_group(&rb_type2);
                     manifold.data.normal = world_pos1 * manifold.local_n1;
 
                     // Generate solver contacts.
