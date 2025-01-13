@@ -8,6 +8,7 @@ use std::num::NonZeroUsize;
 use bevy::prelude::*;
 
 use crate::debug_render::{DebugRenderPipelineResource, RapierDebugRenderPlugin};
+use crate::graphics::BevyMaterialComponent;
 use crate::physics::{DeserializedPhysicsSnapshot, PhysicsEvents, PhysicsSnapshot, PhysicsState};
 use crate::plugin::TestbedPlugin;
 use crate::{graphics::GraphicsManager, harness::RunState};
@@ -249,7 +250,7 @@ impl TestbedApp {
     }
 
     pub fn run_with_init(mut self, mut init: impl FnMut(&mut App)) {
-        #[cfg(feature = "profiling")]
+        #[cfg(feature = "profiler_ui")]
         puffin_egui::puffin::set_scopes_on(true);
 
         let mut args = env::args();
@@ -436,7 +437,6 @@ impl TestbedApp {
 
             let mut app = App::new();
             app.insert_resource(ClearColor(Color::from(Srgba::rgb(0.15, 0.15, 0.15))))
-                .insert_resource(Msaa::Sample4)
                 .insert_resource(AmbientLight {
                     brightness: 0.3,
                     ..Default::default()
@@ -492,13 +492,6 @@ impl TestbedGraphics<'_, '_, '_, '_, '_, '_> {
         )
     }
 
-    pub fn remove_collider(&mut self, handle: ColliderHandle, colliders: &ColliderSet) {
-        if let Some(parent_handle) = colliders.get(handle).map(|c| c.parent()) {
-            self.graphics
-                .remove_collider_nodes(&mut *self.commands, parent_handle, handle)
-        }
-    }
-
     pub fn remove_body(&mut self, handle: RigidBodyHandle) {
         self.graphics.remove_body_nodes(&mut *self.commands, handle)
     }
@@ -511,6 +504,18 @@ impl TestbedGraphics<'_, '_, '_, '_, '_, '_> {
             handle,
             colliders,
         )
+    }
+
+    pub fn remove_collider(&mut self, handle: ColliderHandle, colliders: &ColliderSet) {
+        if let Some(parent_handle) = colliders.get(handle).map(|c| c.parent()) {
+            self.graphics
+                .remove_collider_nodes(&mut *self.commands, parent_handle, handle)
+        }
+    }
+
+    pub fn update_collider(&mut self, handle: ColliderHandle, colliders: &ColliderSet) {
+        self.remove_collider(handle, colliders);
+        self.add_collider(handle, colliders);
     }
 
     pub fn keys(&self) -> &ButtonInput<KeyCode> {
@@ -1092,36 +1097,35 @@ fn setup_graphics_environment(mut commands: Commands) {
         ..Default::default()
     });
 
-    commands.spawn(DirectionalLightBundle {
-        directional_light: DirectionalLight {
+    commands.spawn((
+        DirectionalLight {
             shadows_enabled: false,
             ..Default::default()
         },
-        transform: Transform {
+        Transform {
             translation: Vec3::new(10.0, 2.0, 10.0),
             rotation: Quat::from_rotation_x(-std::f32::consts::FRAC_PI_4),
             ..Default::default()
         },
-        ..Default::default()
-    });
+    ));
 
-    commands
-        .spawn(Camera3dBundle {
-            transform: Transform::from_matrix(
-                Mat4::look_at_rh(
-                    Vec3::new(-30.0, 30.0, 100.0),
-                    Vec3::new(0.0, 10.0, 0.0),
-                    Vec3::new(0.0, 1.0, 0.0),
-                )
-                .inverse(),
-            ),
-            ..Default::default()
-        })
-        .insert(OrbitCamera {
+    commands.spawn((
+        Camera3d::default(),
+        Msaa::Sample4,
+        MainCamera,
+        Transform::from_matrix(
+            Mat4::look_at_rh(
+                Vec3::new(-30.0, 30.0, 100.0),
+                Vec3::new(0.0, 10.0, 0.0),
+                Vec3::new(0.0, 1.0, 0.0),
+            )
+            .inverse(),
+        ),
+        OrbitCamera {
             rotate_sensitivity: 0.05,
             ..OrbitCamera::default()
-        })
-        .insert(MainCamera);
+        },
+    ));
 }
 
 #[cfg(feature = "dim2")]
@@ -1140,14 +1144,14 @@ fn setup_graphics_environment(mut commands: Commands) {
     //     ..Default::default()
     // });
     commands
-        .spawn(Camera2dBundle {
-            transform: Transform {
+        .spawn((
+            Camera2d,
+            Transform {
                 translation: Vec3::new(0.0, 0.0, 0.0),
                 rotation: Quat::IDENTITY,
                 scale: Vec3::new(0.01, 0.01, 1.0),
             },
-            ..Camera2dBundle::default()
-        })
+        ))
         .insert(OrbitCamera {
             zoom: 100.0,
             pan_sensitivity: 0.02,
@@ -1188,7 +1192,7 @@ fn update_testbed(
     (mut gfx_components, mut cameras, mut material_handles): (
         Query<&mut Transform>,
         Query<(&Camera, &GlobalTransform, &mut OrbitCamera)>,
-        Query<&mut Handle<BevyMaterial>>,
+        Query<&mut BevyMaterialComponent>,
     ),
     keys: Res<ButtonInput<KeyCode>>,
 ) {
@@ -1582,7 +1586,7 @@ fn clear(
 
 #[cfg(feature = "dim2")]
 fn highlight_hovered_body(
-    _material_handles: &mut Query<&mut Handle<BevyMaterial>>,
+    _material_handles: &mut Query<&mut BevyMaterialComponent>,
     _graphics_manager: &mut GraphicsManager,
     _testbed_state: &mut TestbedState,
     _physics: &PhysicsState,
@@ -1595,7 +1599,7 @@ fn highlight_hovered_body(
 
 #[cfg(feature = "dim3")]
 fn highlight_hovered_body(
-    material_handles: &mut Query<&mut Handle<BevyMaterial>>,
+    material_handles: &mut Query<&mut BevyMaterialComponent>,
     graphics_manager: &mut GraphicsManager,
     testbed_state: &mut TestbedState,
     physics: &PhysicsState,
@@ -1607,7 +1611,7 @@ fn highlight_hovered_body(
         if let Some(nodes) = graphics_manager.body_nodes_mut(highlighted_body) {
             for node in nodes {
                 if let Ok(mut handle) = material_handles.get_mut(node.entity) {
-                    *handle = node.material.clone_weak()
+                    **handle = node.material.clone_weak()
                 };
             }
         }
@@ -1644,7 +1648,7 @@ fn highlight_hovered_body(
 
                 for node in graphics_manager.body_nodes_mut(parent_handle).unwrap() {
                     if let Ok(mut handle) = material_handles.get_mut(node.entity) {
-                        *handle = selection_material.clone_weak();
+                        **handle = selection_material.clone_weak();
                     }
                 }
             }

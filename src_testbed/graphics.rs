@@ -21,6 +21,10 @@ use std::collections::HashMap;
 pub type BevyMaterial = bevy_sprite::ColorMaterial;
 #[cfg(feature = "dim3")]
 pub type BevyMaterial = StandardMaterial;
+#[cfg(feature = "dim2")]
+pub type BevyMaterialComponent = MeshMaterial2d<BevyMaterial>;
+#[cfg(feature = "dim3")]
+pub type BevyMaterialComponent = MeshMaterial3d<BevyMaterial>;
 
 pub type InstancedMaterials = HashMap<Point3<usize>, Handle<BevyMaterial>>;
 pub const SELECTED_OBJECT_MATERIAL_KEY: Point3<usize> = point![42, 42, 42];
@@ -79,13 +83,16 @@ impl GraphicsManager {
     ) {
         let body = body.unwrap_or(RigidBodyHandle::invalid());
         if let Some(sns) = self.b2sn.get_mut(&body) {
-            for sn in sns.iter_mut() {
+            sns.retain(|sn| {
                 if let Some(sn_c) = sn.collider {
                     if sn_c == collider {
                         commands.entity(sn.entity).despawn();
+                        return false;
                     }
                 }
-            }
+
+                true
+            });
         }
     }
 
