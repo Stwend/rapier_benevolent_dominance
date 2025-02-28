@@ -638,6 +638,32 @@ impl RigidBody {
         }
     }
 
+    /// The benevolence of this rigid-bodys dominance.
+    pub fn dominance_is_benevolent(&self) -> bool {
+        self.dominance.is_benevolent
+    }
+
+    /// The benevolence of this rigid-bodys dominance.
+    pub fn set_dominance_is_benevolent(&mut self, is_benevolent: bool) {
+        if self.dominance.is_benevolent != is_benevolent {
+            self.changes.insert(RigidBodyChanges::DOMINANCE);
+            self.dominance.is_benevolent = is_benevolent;
+        }
+    }
+
+    /// The humbleness of this rigid-bodys dominance.
+    pub fn dominance_is_humble(&self) -> bool {
+        self.dominance.is_humble
+    }
+
+    /// The humbleness of this rigid-bodys dominance.
+    pub fn set_dominance_is_humble(&mut self, humbleness: bool) {
+        if self.dominance.is_humble != humbleness {
+            self.changes.insert(RigidBodyChanges::DOMINANCE);
+            self.dominance.is_humble = humbleness;
+        }
+    }
+
     /// Adds a collider to this rigid-body.
     pub(crate) fn add_collider_internal(
         &mut self,
