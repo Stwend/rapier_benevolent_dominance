@@ -9,9 +9,12 @@ use bevy::prelude::*;
 use bevy::render::camera::Camera;
 use std::ops::RangeInclusive;
 
+#[cfg(target_os = "macos")]
+const LINE_TO_PIXEL_RATIO: f32 = 0.0005;
+#[cfg(not(target_os = "macos"))]
 const LINE_TO_PIXEL_RATIO: f32 = 0.1;
 
-#[derive(Component)]
+#[derive(Component, PartialEq, Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct OrbitCamera {
     pub x: f32,
     pub y: f32,

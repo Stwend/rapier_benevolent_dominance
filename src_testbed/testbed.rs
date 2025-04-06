@@ -1,23 +1,23 @@
 #![allow(clippy::bad_bit_mask)] // otherwise clippy complains because of TestbedStateFlags::NONE which is 0.
 #![allow(clippy::unnecessary_cast)] // allowed for f32 -> f64 cast for the f64 testbed.
 
+use bevy::prelude::*;
 use std::env;
 use std::mem;
 use std::num::NonZeroUsize;
 
-use bevy::prelude::*;
-
 use crate::debug_render::{DebugRenderPipelineResource, RapierDebugRenderPlugin};
 use crate::graphics::BevyMaterialComponent;
+use crate::mouse::{self, track_mouse_state, MainCamera, SceneMouse};
 use crate::physics::{DeserializedPhysicsSnapshot, PhysicsEvents, PhysicsSnapshot, PhysicsState};
 use crate::plugin::TestbedPlugin;
+use crate::save::SerializableTestbedState;
+use crate::settings::ExampleSettings;
+use crate::ui;
 use crate::{graphics::GraphicsManager, harness::RunState};
-use crate::{mouse, ui};
+use bevy::window::PrimaryWindow;
 
 use na::{self, Point2, Point3, Vector3};
-#[cfg(feature = "dim3")]
-use rapier::control::DynamicRayCastVehicleController;
-use rapier::control::KinematicCharacterController;
 use rapier::dynamics::{
     ImpulseJointSet, IntegrationParameters, MultibodyJointSet, RigidBodyActivation,
     RigidBodyHandle, RigidBodySet,
@@ -26,7 +26,9 @@ use rapier::dynamics::{
 use rapier::geometry::Ray;
 use rapier::geometry::{ColliderHandle, ColliderSet, NarrowPhase};
 use rapier::math::{Real, Vector};
-use rapier::pipeline::{PhysicsHooks, QueryFilter, QueryPipeline};
+use rapier::pipeline::{PhysicsHooks, QueryPipeline};
+#[cfg(feature = "dim3")]
+use rapier::{control::DynamicRayCastVehicleController, prelude::QueryFilter};
 
 #[cfg(all(feature = "dim2", feature = "other-backends"))]
 use crate::box2d_backend::Box2dWorld;
@@ -51,17 +53,21 @@ const BOX2D_BACKEND: usize = 1;
 pub(crate) const PHYSX_BACKEND_PATCH_FRICTION: usize = 1;
 pub(crate) const PHYSX_BACKEND_TWO_FRICTION_DIR: usize = 2;
 
-#[derive(PartialEq)]
+pub fn save_file_path() -> String {
+    format!("testbed_state_{}.autosave.json", env!("CARGO_CRATE_NAME"))
+}
+
+#[derive(Default, PartialEq, Copy, Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum RunMode {
     Running,
+    #[default]
     Stop,
     Step,
 }
 
 bitflags::bitflags! {
-    #[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
+    #[derive(Copy, Clone, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
     pub struct TestbedStateFlags: u32 {
-        const NONE = 0;
         const SLEEP = 1 << 0;
         const SUB_STEPPING = 1 << 1;
         const SHAPES = 1 << 2;
@@ -72,6 +78,13 @@ bitflags::bitflags! {
         const CENTER_OF_MASSES = 1 << 7;
         const WIREFRAME = 1 << 8;
         const STATISTICS = 1 << 9;
+        const DRAW_SURFACES = 1 << 10;
+    }
+}
+
+impl Default for TestbedStateFlags {
+    fn default() -> Self {
+        TestbedStateFlags::DRAW_SURFACES | TestbedStateFlags::SLEEP
     }
 }
 
@@ -84,10 +97,11 @@ bitflags::bitflags! {
         const BACKEND_CHANGED = 1 << 3;
         const TAKE_SNAPSHOT = 1 << 4;
         const RESTORE_SNAPSHOT = 1 << 5;
+        const APP_STARTED = 1 << 6;
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum RapierSolverType {
     #[default]
     TgsSoft,
@@ -102,8 +116,6 @@ pub struct TestbedState {
     pub running: RunMode,
     pub draw_colls: bool,
     pub highlighted_body: Option<RigidBodyHandle>,
-    pub character_body: Option<RigidBodyHandle>,
-    pub character_controller: Option<KinematicCharacterController>,
     #[cfg(feature = "dim3")]
     pub vehicle_controller: Option<DynamicRayCastVehicleController>,
     //    pub grabbed_object: Option<DefaultBodyPartHandle>,
@@ -118,11 +130,40 @@ pub struct TestbedState {
     pub example_names: Vec<&'static str>,
     pub selected_example: usize,
     pub selected_backend: usize,
+    pub example_settings: ExampleSettings,
     pub solver_type: RapierSolverType,
     pub physx_use_two_friction_directions: bool,
     pub snapshot: Option<PhysicsSnapshot>,
     pub nsteps: usize,
+    prev_save_data: SerializableTestbedState,
     camera_locked: bool, // Used so that the camera can remain the same before and after we change backend or press the restart button.
+}
+
+impl TestbedState {
+    fn save_data(&self, camera: OrbitCamera) -> SerializableTestbedState {
+        SerializableTestbedState {
+            running: self.running,
+            flags: self.flags,
+            selected_example: self.selected_example,
+            selected_backend: self.selected_backend,
+            example_settings: self.example_settings.clone(),
+            solver_type: self.solver_type,
+            physx_use_two_friction_directions: self.physx_use_two_friction_directions,
+            camera,
+        }
+    }
+
+    pub fn apply_saved_data(&mut self, state: SerializableTestbedState, camera: &mut OrbitCamera) {
+        self.prev_save_data = state.clone();
+        self.running = state.running;
+        self.flags = state.flags;
+        self.selected_example = state.selected_example;
+        self.selected_backend = state.selected_backend;
+        self.example_settings = state.example_settings;
+        self.solver_type = state.solver_type;
+        self.physx_use_two_friction_directions = state.physx_use_two_friction_directions;
+        *camera = state.camera;
+    }
 }
 
 #[derive(Resource)]
@@ -137,7 +178,7 @@ struct OtherBackends {
 }
 struct Plugins(Vec<Box<dyn TestbedPlugin>>);
 
-pub struct TestbedGraphics<'a, 'b, 'c, 'd, 'e, 'f> {
+pub struct TestbedGraphics<'a, 'b, 'c, 'd, 'e, 'f, 'g, 'h> {
     graphics: &'a mut GraphicsManager,
     commands: &'a mut Commands<'d, 'e>,
     meshes: &'a mut Assets<Mesh>,
@@ -146,12 +187,13 @@ pub struct TestbedGraphics<'a, 'b, 'c, 'd, 'e, 'f> {
     #[allow(dead_code)] // Dead in 2D but not in 3D.
     camera_transform: GlobalTransform,
     camera: &'a mut OrbitCamera,
+    ui_context: &'a mut EguiContexts<'g, 'h>,
     keys: &'a ButtonInput<KeyCode>,
     mouse: &'a SceneMouse,
 }
 
-pub struct Testbed<'a, 'b, 'c, 'd, 'e, 'f> {
-    graphics: Option<TestbedGraphics<'a, 'b, 'c, 'd, 'e, 'f>>,
+pub struct Testbed<'a, 'b, 'c, 'd, 'e, 'f, 'g, 'h> {
+    graphics: Option<TestbedGraphics<'a, 'b, 'c, 'd, 'e, 'f, 'g, 'h>>,
     harness: &'a mut Harness,
     state: &'a mut TestbedState,
     #[cfg(feature = "other-backends")]
@@ -172,7 +214,7 @@ pub struct TestbedApp {
 impl TestbedApp {
     pub fn new_empty() -> Self {
         let graphics = GraphicsManager::new();
-        let flags = TestbedStateFlags::SLEEP;
+        let flags = TestbedStateFlags::default();
 
         #[allow(unused_mut)]
         let mut backend_names = vec!["rapier"];
@@ -187,8 +229,6 @@ impl TestbedApp {
             running: RunMode::Running,
             draw_colls: false,
             highlighted_body: None,
-            character_body: None,
-            character_controller: None,
             #[cfg(feature = "dim3")]
             vehicle_controller: None,
             //            grabbed_object: None,
@@ -199,15 +239,17 @@ impl TestbedApp {
             snapshot: None,
             prev_flags: flags,
             flags,
-            action_flags: TestbedActionFlags::empty(),
+            action_flags: TestbedActionFlags::APP_STARTED | TestbedActionFlags::EXAMPLE_CHANGED,
             backend_names,
             example_names: Vec::new(),
+            example_settings: ExampleSettings::default(),
             selected_example: 0,
             selected_backend: RAPIER_BACKEND,
             solver_type: RapierSolverType::default(),
             physx_use_two_friction_directions: true,
             nsteps: 1,
             camera_locked: false,
+            prev_save_data: SerializableTestbedState::default(),
         };
 
         let harness = Harness::new_empty();
@@ -230,12 +272,8 @@ impl TestbedApp {
         }
     }
 
-    pub fn from_builders(default: usize, builders: SimulationBuilders) -> Self {
+    pub fn from_builders(builders: SimulationBuilders) -> Self {
         let mut res = TestbedApp::new_empty();
-        res.state
-            .action_flags
-            .set(TestbedActionFlags::EXAMPLE_CHANGED, true);
-        res.state.selected_example = default;
         res.set_builders(builders);
         res
     }
@@ -470,9 +508,13 @@ impl TestbedApp {
     }
 }
 
-impl TestbedGraphics<'_, '_, '_, '_, '_, '_> {
+impl<'g, 'h> TestbedGraphics<'_, '_, '_, '_, '_, '_, 'g, 'h> {
     pub fn set_body_color(&mut self, body: RigidBodyHandle, color: [f32; 3]) {
         self.graphics.set_body_color(self.materials, body, color);
+    }
+
+    pub fn ui_context_mut(&mut self) -> &mut EguiContexts<'g, 'h> {
+        &mut *self.ui_context
     }
 
     pub fn add_body(
@@ -527,22 +569,25 @@ impl TestbedGraphics<'_, '_, '_, '_, '_, '_> {
     }
 
     #[cfg(feature = "dim3")]
+    pub fn camera_rotation(&self) -> na::UnitQuaternion<Real> {
+        let (_, rot, _) = self.camera_transform.to_scale_rotation_translation();
+        na::Unit::new_unchecked(na::Quaternion::new(
+            rot.w as Real,
+            rot.x as Real,
+            rot.y as Real,
+            rot.z as Real,
+        ))
+    }
+
+    #[cfg(feature = "dim3")]
     pub fn camera_fwd_dir(&self) -> Vector<f32> {
         (self.camera_transform * -Vec3::Z).normalize().into()
     }
 }
 
-impl Testbed<'_, '_, '_, '_, '_, '_> {
+impl Testbed<'_, '_, '_, '_, '_, '_, '_, '_> {
     pub fn set_number_of_steps_per_frame(&mut self, nsteps: usize) {
         self.state.nsteps = nsteps
-    }
-
-    pub fn set_character_body(&mut self, handle: RigidBodyHandle) {
-        self.state.character_body = Some(handle);
-    }
-
-    pub fn set_character_controller(&mut self, controller: Option<KinematicCharacterController>) {
-        self.state.character_controller = controller;
     }
 
     #[cfg(feature = "dim3")]
@@ -564,6 +609,10 @@ impl Testbed<'_, '_, '_, '_, '_, '_> {
 
     pub fn harness_mut(&mut self) -> &mut Harness {
         self.harness
+    }
+
+    pub fn example_settings_mut(&mut self) -> &mut ExampleSettings {
+        &mut self.state.example_settings
     }
 
     pub fn set_world(
@@ -606,7 +655,6 @@ impl Testbed<'_, '_, '_, '_, '_, '_> {
             .set(TestbedActionFlags::RESET_WORLD_GRAPHICS, true);
 
         self.state.highlighted_body = None;
-        self.state.character_body = None;
         #[cfg(feature = "dim3")]
         {
             self.state.vehicle_controller = None;
@@ -763,133 +811,6 @@ impl Testbed<'_, '_, '_, '_, '_, '_> {
                 &self.harness.physics.query_pipeline,
                 QueryFilter::exclude_dynamic().exclude_rigid_body(vehicle.chassis),
             );
-        }
-    }
-
-    fn update_character_controller(&mut self, events: &ButtonInput<KeyCode>) {
-        if self.state.running == RunMode::Stop {
-            return;
-        }
-
-        if let Some(character_handle) = self.state.character_body {
-            let mut desired_movement = Vector::zeros();
-            let mut speed = 0.1;
-
-            #[cfg(feature = "dim2")]
-            for key in events.get_pressed() {
-                match *key {
-                    KeyCode::ArrowRight => {
-                        desired_movement += Vector::x();
-                    }
-                    KeyCode::ArrowLeft => {
-                        desired_movement -= Vector::x();
-                    }
-                    KeyCode::Space => {
-                        desired_movement += Vector::y() * 2.0;
-                    }
-                    KeyCode::ControlRight => {
-                        desired_movement -= Vector::y();
-                    }
-                    KeyCode::ShiftRight => {
-                        speed /= 10.0;
-                    }
-                    _ => {}
-                }
-            }
-
-            #[cfg(feature = "dim3")]
-            {
-                let (_, rot, _) = self
-                    .graphics
-                    .as_ref()
-                    .unwrap()
-                    .camera_transform
-                    .to_scale_rotation_translation();
-                let rot = na::Unit::new_unchecked(na::Quaternion::new(rot.w, rot.x, rot.y, rot.z));
-                let mut rot_x = rot * Vector::x();
-                let mut rot_z = rot * Vector::z();
-                rot_x.y = 0.0;
-                rot_z.y = 0.0;
-
-                for key in events.get_pressed() {
-                    match *key {
-                        KeyCode::ArrowRight => {
-                            desired_movement += rot_x;
-                        }
-                        KeyCode::ArrowLeft => {
-                            desired_movement -= rot_x;
-                        }
-                        KeyCode::ArrowUp => {
-                            desired_movement -= rot_z;
-                        }
-                        KeyCode::ArrowDown => {
-                            desired_movement += rot_z;
-                        }
-                        KeyCode::Space => {
-                            desired_movement += Vector::y() * 2.0;
-                        }
-                        KeyCode::ControlRight => {
-                            desired_movement -= Vector::y();
-                        }
-                        KeyCode::ShiftLeft => {
-                            speed /= 10.0;
-                        }
-                        _ => {}
-                    }
-                }
-            }
-
-            desired_movement *= speed;
-            desired_movement -= Vector::y() * speed;
-
-            let controller = self.state.character_controller.unwrap_or_default();
-            let phx = &mut self.harness.physics;
-            let character_body = &phx.bodies[character_handle];
-            let character_collider = &phx.colliders[character_body.colliders()[0]];
-            let character_mass = character_body.mass();
-
-            let mut collisions = vec![];
-            let mvt = controller.move_shape(
-                phx.integration_parameters.dt,
-                &phx.bodies,
-                &phx.colliders,
-                &phx.query_pipeline,
-                character_collider.shape(),
-                character_collider.position(),
-                desired_movement.cast::<Real>(),
-                QueryFilter::new().exclude_rigid_body(character_handle),
-                |c| collisions.push(c),
-            );
-            if let Some(graphics) = &mut self.graphics {
-                if mvt.grounded {
-                    graphics.graphics.set_body_color(
-                        graphics.materials,
-                        character_handle,
-                        [0.1, 0.8, 0.1],
-                    );
-                } else {
-                    graphics.graphics.set_body_color(
-                        graphics.materials,
-                        character_handle,
-                        [0.8, 0.1, 0.1],
-                    );
-                }
-            }
-            controller.solve_character_collision_impulses(
-                phx.integration_parameters.dt,
-                &mut phx.bodies,
-                &phx.colliders,
-                &phx.query_pipeline,
-                character_collider.shape(),
-                character_mass,
-                &*collisions,
-                QueryFilter::new().exclude_rigid_body(character_handle),
-            );
-
-            let character_body = &mut phx.bodies[character_handle];
-            let pos = character_body.position();
-            character_body.set_next_kinematic_translation(pos.translation.vector + mvt.translation);
-            // character_body.set_translation(pos.translation.vector + mvt.translation, false);
         }
     }
 
@@ -1170,9 +1091,6 @@ fn egui_focus(mut ui_context: EguiContexts, mut cameras: Query<&mut OrbitCamera>
     }
 }
 
-use crate::mouse::{track_mouse_state, MainCamera, SceneMouse};
-use bevy::window::PrimaryWindow;
-
 #[allow(clippy::type_complexity)]
 fn update_testbed(
     mut commands: Commands,
@@ -1189,8 +1107,9 @@ fn update_testbed(
     #[cfg(feature = "other-backends")] mut other_backends: NonSendMut<OtherBackends>,
     mut plugins: NonSendMut<Plugins>,
     mut ui_context: EguiContexts,
-    (mut gfx_components, mut cameras, mut material_handles): (
+    (mut gfx_components, mut visibilities, mut cameras, mut material_handles): (
         Query<&mut Transform>,
+        Query<&mut Visibility>,
         Query<(&Camera, &GlobalTransform, &mut OrbitCamera)>,
         Query<&mut BevyMaterialComponent>,
     ),
@@ -1203,6 +1122,8 @@ fn update_testbed(
 
     // Handle inputs
     {
+        let wants_keyboard_inputs = ui_context.ctx_mut().wants_keyboard_input();
+
         let graphics_context = TestbedGraphics {
             graphics: &mut graphics,
             commands: &mut commands,
@@ -1211,6 +1132,7 @@ fn update_testbed(
             components: &mut gfx_components,
             camera_transform: *cameras.single().1,
             camera: &mut cameras.single_mut().2,
+            ui_context: &mut ui_context,
             keys: &keys,
             mouse: &mouse,
         };
@@ -1224,10 +1146,9 @@ fn update_testbed(
             plugins: &mut plugins,
         };
 
-        if !ui_context.ctx_mut().wants_keyboard_input() {
+        if !wants_keyboard_inputs {
             testbed.handle_common_events(&keys);
         }
-        testbed.update_character_controller(&keys);
         #[cfg(feature = "dim3")]
         {
             testbed.update_vehicle_controller(&keys);
@@ -1278,6 +1199,24 @@ fn update_testbed(
                 .set(TestbedActionFlags::EXAMPLE_CHANGED, true);
         }
 
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let app_started = state.action_flags.contains(TestbedActionFlags::APP_STARTED);
+
+            if app_started {
+                state
+                    .action_flags
+                    .set(TestbedActionFlags::APP_STARTED, false);
+                if let Some(saved_state) = std::fs::read(save_file_path())
+                    .ok()
+                    .and_then(|data| serde_json::from_slice::<SerializableTestbedState>(&data).ok())
+                {
+                    state.apply_saved_data(saved_state, &mut cameras.single_mut().2);
+                    state.camera_locked = true;
+                }
+            }
+        }
+
         let example_changed = state
             .action_flags
             .contains(TestbedActionFlags::EXAMPLE_CHANGED);
@@ -1296,6 +1235,10 @@ fn update_testbed(
             let graphics = &mut *graphics;
             let meshes = &mut *meshes;
 
+            if !restarted {
+                state.example_settings.clear();
+            }
+
             let graphics_context = TestbedGraphics {
                 graphics: &mut *graphics,
                 commands: &mut commands,
@@ -1304,6 +1247,7 @@ fn update_testbed(
                 components: &mut gfx_components,
                 camera_transform: *cameras.single().1,
                 camera: &mut cameras.single_mut().2,
+                ui_context: &mut ui_context,
                 keys: &keys,
                 mouse: &mouse,
             };
@@ -1478,6 +1422,7 @@ fn update_testbed(
                     components: &mut gfx_components,
                     camera_transform: *cameras.single().1,
                     camera: &mut cameras.single_mut().2,
+                    ui_context: &mut ui_context,
                     keys: &keys,
                     mouse: &mouse,
                 };
@@ -1543,10 +1488,13 @@ fn update_testbed(
         }
     };
 
+    // Draw
     graphics.draw(
+        state.flags,
         &harness.physics.bodies,
         &harness.physics.colliders,
         &mut gfx_components,
+        &mut visibilities,
         &mut *materials,
     );
 
@@ -1567,6 +1515,20 @@ fn update_testbed(
 
     if state.running == RunMode::Step {
         state.running = RunMode::Stop;
+    }
+
+    // If any saveable settings changed, save them again.
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let new_save_data = state.save_data(cameras.single().2.clone());
+        if state.prev_save_data != new_save_data {
+            // Save the data in a file.
+            let data = serde_json::to_string_pretty(&new_save_data).unwrap();
+            if let Err(e) = std::fs::write(save_file_path(), &data) {
+                error!("Failed to write autosave file: {}", e);
+            }
+            state.prev_save_data = new_save_data;
+        }
     }
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "rapier_testbed3d"
-version = "0.23.0"
+version = "0.23.1"
 authors = ["Sébastien Crozet <sebcrozet@dimforge.com>"]
 description = "Testbed for the Rapier 3-dimensional physics engine in Rust."
 homepage = "http://rapier.rs"
@@ -57,6 +57,7 @@ bincode = "1"
 md5 = "0.7"
 Inflector = "0.11"
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 bevy_egui = "0.31"
 bevy_ecs = "0.15"
 bevy_core_pipeline = "0.15"
@@ -77,6 +78,7 @@ bevy = { version = "0.15", default-features = false, features = [
     "bevy_render",
     "bevy_pbr",
     "bevy_gizmos",
+    "serialize"
 ] }
 
 # Dependencies for WASM only.

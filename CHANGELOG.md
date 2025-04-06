@@ -1,24 +1,47 @@
+## Unreleased
+
+### Added
+
+- `IntegrationParameters` now implements `PartialEq`.
+
+## v0.23.1 (05 March 2025)
+
+### Added
+
+- Add `PdController` and `PidController` for making it easier to control dynamic rigid-bodies at the velocity level.
+  This can for example be used as a building block for a dynamic character controller.
+- Add `RigidBodyPosition::pose_errors` to compute the translational and rotational delta between
+  `RigidBodyPosition::position` and `::next_position`.
+- Implement `Sub` for `RigidBodyVelocity`.
+- Add `RigidBody::local_center_of_mass()` to get its center-of-mass in the rigid-body’s local-space.
+
 ## v0.23.0 (08 Jan 2025)
 
 ### Fix
 
-- The broad-phase region key has been replaced by an i64 in the f64 version of rapier, increasing the range before panics occur.
+- The broad-phase region key has been replaced by an i64 in the f64 version of rapier, increasing the range before
+  panics occur.
 - Fix `BroadphaseMultiSap` not being able to serialize correctly with serde_json.
-- Fix `KinematicCharacterController::move_shape` not respecting parameters `max_slope_climb_angle` and `min_slope_slide_angle`.
+- Fix `KinematicCharacterController::move_shape` not respecting parameters `max_slope_climb_angle` and
+  `min_slope_slide_angle`.
 - Improve ground detection reliability for `KinematicCharacterController`. (#715)
 - Fix wasm32 default values for physics hooks filter to be consistent with native: `COMPUTE_IMPULSES`.
+- Fix changing a collider parent when ongoing collisions should be affected (#742):
+    - Fix collisions not being removed when a collider is parented to a rigidbody while in collision with it.
+    - Fix collisions not being added when the parent was removed while intersecting a (previously) sibling collider.
 
 ### Added
 
 - `RigidBodySet` and `ColliderSet` have a new constructor `with_capacity`.
 - Use `profiling` crate to provide helpful profiling information in different tools.
-  - The testbeds have been updated to use `puffin_egui`
+    - The testbeds have been updated to use `puffin_egui`
 
 ### Modified
 
 - `InteractionGroups` default value for `memberships` is now `GROUP_1` (#706)
 - `ImpulseJointSet::get_mut` has a new parameter `wake_up: bool`, to wake up connected bodies.
-- Removed unmaintained `instant` in favor of `web-time`. This effectively removes the `wasm-bindgen` transitive dependency as it's no longer needed.
+- Removed unmaintained `instant` in favor of `web-time`. This effectively removes the `wasm-bindgen` transitive
+  dependency as it's no longer needed.
 - Significantly improve performances of `QueryPipeline::intersection_with_shape`.
 
 ## v0.22.0 (20 July 2024)
@@ -86,9 +109,9 @@ This release introduces two new crates:
 
 ### Modified
 
-- Renamed `JointAxesMask::X/Y/Z` to `::LIN_X/LIN_Y/LIN_Z`; and renamed `JointAxisMask::X/Y/Z` to `::LinX/LinY/LynZ` to
+- Renamed `JointAxesMask::X/Y/Z` to `::LIN_X/LIN_Y/LIN_Z`; and renamed `JointAxesMask::X/Y/Z` to `::LinX/LinY/LynZ` to
   make it clear it is not to be used as angular axes (the angular axis are `JointAxesMask::ANG_X/ANG_Y/AngZ` and
-  `JointAxisMask::AngX/AngY/AngZ`).
+  `JointAxesMask::AngX/AngY/AngZ`).
 - The contact constraints regularization parameters have been changed from `erp/damping_ratio` to
   `natural_frequency/damping_ratio`. This helps define them in a timestep-length independent way. The new variables
   are named `IntegrationParameters::contact_natural_frequency` and `IntegrationParameters::contact_damping_ratio`.
@@ -745,7 +768,8 @@ Several new shape types are now supported:
 
 It is possible to build `ColliderDesc` using these new shapes:
 
-- `ColliderBuilder::round_cuboid`, `ColliderBuilder::segment`, `ColliderBuilder::triangle`, `ColliderBuilder::round_triangle`,
+- `ColliderBuilder::round_cuboid`, `ColliderBuilder::segment`, `ColliderBuilder::triangle`,
+  `ColliderBuilder::round_triangle`,
   `ColliderBuilder::convex_hull`, `ColliderBuilder::round_convex_hull`, `ColliderBuilder::polyline`,
   `ColliderBuilder::convex_decomposition`, `ColliderBuilder::round_convex_decomposition`,
   `ColliderBuilder::convex_polyline` (2D only), `ColliderBuilder::round_convex_polyline` (2D only),
