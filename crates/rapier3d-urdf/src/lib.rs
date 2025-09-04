@@ -221,9 +221,9 @@ impl UrdfRobot {
     /// - `path`: the path of the URDF file.
     /// - `options`: customize the creation of rapier objects from the URDF description.
     /// - `mesh_dir`: the base directory containing the meshes referenced by the URDF file. When
-    ///               a mesh reference is found in the URDF file, this `mesh_dir` is appended
-    ///               to the file path. If `mesh_dir` is `None` then the mesh directory is assumed
-    ///               to be the same directory as the one containing the URDF file.
+    ///   a mesh reference is found in the URDF file, this `mesh_dir` is appended
+    ///   to the file path. If `mesh_dir` is `None` then the mesh directory is assumed
+    ///   to be the same directory as the one containing the URDF file.
     pub fn from_file(
         path: impl AsRef<Path>,
         options: UrdfLoaderOptions,
@@ -249,8 +249,8 @@ impl UrdfRobot {
     /// - `str`: the string content of an URDF file.
     /// - `options`: customize the creation of rapier objects from the URDF description.
     /// - `mesh_dir`: the base directory containing the meshes referenced by the URDF file. When
-    ///               a mesh reference is found in the URDF file, this `mesh_dir` is appended
-    ///               to the file path.
+    ///   a mesh reference is found in the URDF file, this `mesh_dir` is appended
+    ///   to the file path.
     pub fn from_str(
         str: &str,
         options: UrdfLoaderOptions,
@@ -272,8 +272,8 @@ impl UrdfRobot {
     /// - `robot`: the robot loaded from an URDF file.
     /// - `options`: customize the creation of rapier objects from the URDF description.
     /// - `mesh_dir`: the base directory containing the meshes referenced by the URDF file. When
-    ///               a mesh reference is found in the URDF file, this `mesh_dir` is appended
-    ///               to the file path.
+    ///   a mesh reference is found in the URDF file, this `mesh_dir` is appended
+    ///   to the file path.
     pub fn from_robot(robot: &Robot, options: UrdfLoaderOptions, mesh_dir: &Path) -> Self {
         let mut name_to_link_id = HashMap::new();
         let mut link_is_root = vec![true; robot.links.len()];
@@ -497,7 +497,9 @@ fn urdf_to_colliders(
         }
         #[cfg(not(feature = "__meshloader_is_enabled"))]
         Geometry::Mesh { .. } => {
-            log::error!("Mesh loading is disabled by default. Enable one of the format features (`stl`, `collada`, `wavefront`) of `rapier3d-urdf` for mesh support.");
+            log::error!(
+                "Mesh loading is disabled by default. Enable one of the format features (`stl`, `collada`, `wavefront`) of `rapier3d-urdf` for mesh support."
+            );
         }
         #[cfg(feature = "__meshloader_is_enabled")]
         Geometry::Mesh { filename, scale } => {

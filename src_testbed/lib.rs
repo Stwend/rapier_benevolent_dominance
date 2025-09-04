@@ -1,4 +1,5 @@
 #![allow(clippy::too_many_arguments)]
+
 extern crate nalgebra as na;
 
 pub use crate::graphics::{BevyMaterial, GraphicsManager};
@@ -6,7 +7,7 @@ pub use crate::harness::plugin::HarnessPlugin;
 pub use crate::physics::PhysicsState;
 pub use crate::plugin::TestbedPlugin;
 pub use crate::testbed::{Testbed, TestbedApp, TestbedGraphics, TestbedState};
-pub use bevy::prelude::KeyCode;
+pub use bevy::prelude::{Color, KeyCode};
 
 #[cfg(all(feature = "dim2", feature = "other-backends"))]
 mod box2d_backend;

@@ -1,7 +1,7 @@
 use crate::dynamics::RigidBodySet;
 use crate::geometry::{ColliderSet, CollisionEvent, ContactForceEvent, ContactPair};
 use crate::math::Real;
-use crossbeam::channel::Sender;
+use std::sync::mpsc::Sender;
 
 bitflags::bitflags! {
     #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
@@ -38,8 +38,8 @@ pub trait EventHandler: Send + Sync {
     /// * `bodies` - The set of rigid-bodies.
     /// * `colliders` - The set of colliders.
     /// * `contact_pair` - The current state of contacts between the two colliders. This is set to `None`
-    ///                    if at least one of the collider is a sensor (in which case no contact information
-    ///                    is ever computed).
+    ///   if at least one of the collider is a sensor (in which case no contact information
+    ///   is ever computed).
     fn handle_collision_event(
         &self,
         bodies: &RigidBodySet,
@@ -90,14 +90,14 @@ impl EventHandler for () {
     }
 }
 
-/// A collision event handler that collects events into a crossbeam channel.
+/// A collision event handler that collects events into a channel.
 pub struct ChannelEventCollector {
     collision_event_sender: Sender<CollisionEvent>,
     contact_force_event_sender: Sender<ContactForceEvent>,
 }
 
 impl ChannelEventCollector {
-    /// Initialize a new collision event handler from crossbeam channel senders.
+    /// Initialize a new collision event handler from channel senders.
     pub fn new(
         collision_event_sender: Sender<CollisionEvent>,
         contact_force_event_sender: Sender<ContactForceEvent>,

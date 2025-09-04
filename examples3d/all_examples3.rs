@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#![allow(clippy::type_complexity)]
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
@@ -16,6 +17,7 @@ mod convex_polyhedron3;
 mod damping3;
 mod debug_add_remove_collider3;
 mod debug_articulations3;
+mod debug_balls3;
 mod debug_big_colliders3;
 mod debug_boxes3;
 mod debug_cylinder3;
@@ -58,6 +60,7 @@ mod trimesh3;
 mod urdf3;
 mod vehicle_controller3;
 mod vehicle_joints3;
+mod voxels3;
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
 pub fn main() {
@@ -87,6 +90,7 @@ pub fn main() {
         ("Spring Joints", spring_joints3::init_world),
         ("TriMesh", trimesh3::init_world),
         ("Urdf", urdf3::init_world),
+        ("Voxels", voxels3::init_world),
         ("Vehicle controller", vehicle_controller3::init_world),
         ("Vehicle joints", vehicle_joints3::init_world),
         ("Keva tower", keva3::init_world),
@@ -98,6 +102,7 @@ pub fn main() {
         ),
         ("(Debug) big colliders", debug_big_colliders3::init_world),
         ("(Debug) boxes", debug_boxes3::init_world),
+        ("(Debug) balls", debug_balls3::init_world),
         ("(Debug) pop", debug_pop3::init_world),
         (
             "(Debug) dyn. coll. add",

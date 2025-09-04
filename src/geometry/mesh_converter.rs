@@ -23,8 +23,7 @@ pub enum MeshConverterError {
 }
 
 /// Determines how meshes (generally when loaded from a file) are converted into Rapier colliders.
-// TODO: implement Copy once we add a Copy implementation for VHACDParameters.
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub enum MeshConverter {
     /// The mesh is loaded as-is without any particular processing.
     #[default]
@@ -76,7 +75,8 @@ impl MeshConverter {
                 SharedShape::new(cuboid)
             }
             MeshConverter::Aabb => {
-                let aabb = bounding_volume::details::local_point_cloud_aabb(&vertices);
+                let aabb =
+                    bounding_volume::details::local_point_cloud_aabb(vertices.iter().copied());
                 let cuboid = Cuboid::new(aabb.half_extents());
                 transform = Isometry::from(aabb.center().coords);
                 SharedShape::new(cuboid)
